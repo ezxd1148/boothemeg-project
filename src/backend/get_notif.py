@@ -3,7 +3,7 @@ import sys
 import json
 import hashlib
 import datetime
-from adbutils import adb
+from adbutils import adb  # type: ignore
 
 # sys.stdout.reconfigure(encoding='utf-8')
 
