@@ -1,0 +1,19 @@
+# backend
+
+## get_notif.py
+
+adbutils
+
+## processing.py
+
+python-dotenv-vault
+python-dotenv
+openai
+
+# integration
+
+## test.py
+
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
