@@ -1,0 +1,72 @@
+[
+  {
+    "app": "Telegram",
+    "sender": "String (Telegram)",
+    "message": "String (10 new messages from 5 chats)",
+    "time": "2026-05-18 13:14:30",
+    "category": "msg"
+  },
+  {
+    "app": "Telegram",
+    "sender": "String (Waktu Solat Malaysia)",
+    "message": "String (Telah masuk waktu Solat Fardhu Zohor (01:11 pm) bagi kawasan Seremban dan yang sama waktu dengannya.",
+    "time": "2026-05-18 13:14:30",
+    "category": "msg"
+  },
+  {
+    "app": "Telegram",
+    "sender": "String (Project Conquer Sentul: Hasif Izdihar)",
+    "message": "String (f1 tahun ni ada 26 orang je)",
+    "time": "2026-05-18 13:08:12",
+    "category": "msg"
+  },
+  {
+    "app": "Telegram",
+    "sender": "String (boothemeg: Afdhall)",
+    "message": "String (okdah)",
+    "time": "2026-05-18 13:06:07",
+    "category": "msg"
+  },
+  {
+    "app": "Telegram",
+    "sender": "String (Afdhall)",
+    "message": "String (bro help me take out the trash at 5pm today)",
+    "time": "2026-05-18 13:03:44",
+    "category": "msg"
+  },
+  {
+    "app": "Securitycenter",
+    "sender": null,
+    "message": null,
+    "time": "2026-05-17 12:43:02",
+    "category": null
+  },
+  {
+    "app": "Passenger",
+    "sender": "String (Beli 1 Dapat 1 Percuma 🍗)",
+    "message": "String (Pesan La Juiceria, MyeongDong Topokki, ZUS Coffee dan banyak lagi dari Kombo Jimat sekarang.)",
+    "time": "2026-05-18 13:16:00",
+    "category": null
+  },
+  {
+    "app": "Aicr",
+    "sender": null,
+    "message": null,
+    "time": "2026-05-18 13:11:20",
+    "category": null
+  },
+  {
+    "app": "Misound",
+    "sender": null,
+    "message": null,
+    "time": "2026-05-18 12:01:50",
+    "category": null
+  },
+  {
+    "app": "Mtp",
+    "sender": "String (Accessing files from Redmi Note 12)",
+    "message": null,
+    "time": "2026-05-18 13:10:10",
+    "category": "sys"
+  }
+]
