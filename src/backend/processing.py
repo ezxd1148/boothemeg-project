@@ -41,6 +41,7 @@ Rules:
 - If no time found but date exists, use null for time
 - attendees only if actual emails are present in the text
 - recurrence only if explicitly stated ("every week", "daily", etc.)
+- if recurrence exist, is_schedulable MUST be true for every notification
 """
 
 load_dotenv()
@@ -53,7 +54,7 @@ client = OpenAI(
 
 def build_prompt(notification_text: str) -> str:
     return f"""
-Today's date: {date.today().isoformat()}
+Today's date: {date.today().isoformat()}. Day: {date.today().strftime("%A")}
 Notification: {notification_text}
 """
 
