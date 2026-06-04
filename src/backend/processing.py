@@ -9,6 +9,7 @@ import os
 from datetime import date
 from pathlib import Path
 
+import get_notif
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -48,7 +49,7 @@ load_dotenv()
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
+    api_key=os.getenv("DEEPSEEK_API_KEY"),  # change
 )
 
 
@@ -61,7 +62,7 @@ Notification: {notification_text}
 
 def extract_event(notification_text: str) -> dict:
     response = client.chat.completions.create(
-        model=os.getenv("OPENROUTER_MODEL"),
+        model=os.getenv("DEEPSEEK_MODEL"),
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": build_prompt(notification_text)},
@@ -78,10 +79,10 @@ def extract_event(notification_text: str) -> dict:
     return json.loads(raw)
 
 
-def process_file(input_path: Path):
+def process_file(input_file):
     results = []
 
-    with open(input_path, "r", encoding="utf-8") as f:
+    with open(input_file, "r", encoding="utf-8") as f:
         data = json.load(f)  # load whole file at once
 
     # handle both single object {} and array [{}]
@@ -92,37 +93,37 @@ def process_file(input_path: Path):
         try:
             text = notif.get("message", "")  # changed from "text" to "message"
             if not text:
-                print(f"[SKIP] Empty message in {input_path.name}")
+                print(f"[SKIP] Empty message in {input_file.name}")
                 continue
 
             event = extract_event(text)
-            event["_source"] = input_path.name
+            event["_source"] = input_file.name
             results.append(event)
             print(
                 f"[OK] {event.get('title')} | schedulable={event.get('is_schedulable')}"
             )
 
         except json.JSONDecodeError as e:
-            print(f"[PARSE ERROR] {input_path.name}: {e}")
+            print(f"[PARSE ERROR] {input_file.name}: {e}")
         except Exception as e:
             print(f"[API ERROR] {e}")
 
     return results
 
 
-def save_results(results: list, input_path: Path):
+def save_results(results: list, input_file: Path):
     OUTPUT_FILE_DIR.mkdir(parents=True, exist_ok=True)
     # One output file per input file
-    output_path = OUTPUT_FILE_DIR / f"{input_path.stem}_processed.json"
+    output_path = OUTPUT_FILE_DIR / f"{input_file.stem}_processed.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     print(f"[SAVED] {output_path}")
 
 
 ## Main
-for sample_file in SAMPLE_FILE_DIR.iterdir():
-    if sample_file.suffix not in (".jsonl", ".json"):
-        continue
-    print(f"\n[PROCESSING] {sample_file.name}")
-    results = process_file(sample_file)
-    save_results(results, sample_file)
+# for sample_file in SAMPLE_FILE_DIR.iterdir():
+#     if sample_file.suffix not in (".jsonl", ".json"):
+#         continue
+#     print(f"\n[PROCESSING] {sample_file.name}")
+#     results = process_file(sample_file)
+#     save_results(results, sample_file)

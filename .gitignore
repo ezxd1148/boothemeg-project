@@ -1,2 +1,7 @@
 .env*
 src/.credentials
+
+# Test sample
+src/samples/
+unused-sample/
+src/backend/output/processed/
