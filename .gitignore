@@ -9,3 +9,6 @@ src/backend/output/processed/
 # cache
 __pycache__/
 .venv/
+
+# agentic stuff
+.agents/

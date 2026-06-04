@@ -1,1 +1,0 @@
-Folder ni untuk frontend
