@@ -3,7 +3,6 @@ import hashlib
 import json
 import re
 import sys
-import time
 from pathlib import Path
 
 from adbutils import adb  # type: ignore
@@ -67,11 +66,11 @@ def get_active_notifications():
     # ── Connect ───────────────────────────────────────────────────────────────
     devices = adb.device_list()
     if not devices:
-        print("No phone detected!")
-        return
+        print("No phone detected!", file=sys.stderr)
+        return None
 
     device = devices[0]
-    print(f"Connected: {device.serial}")
+    print(f"Connected: {device.serial}", file=sys.stderr)
 
     # ── Fetch dump ────────────────────────────────────────────────────────────
     try:
@@ -79,7 +78,7 @@ def get_active_notifications():
         if not raw or not raw.strip():
             raw = device.shell("dumpsys notification")
     except Exception as e:
-        print(f"Shell command failed: {e}")
+        print(f"Shell command failed: {e}", file=sys.stderr)
         return
 
     # ── Load already-processed IDs ────────────────────────────────────────────
@@ -157,7 +156,7 @@ def get_active_notifications():
         seen_ids.add(adb_key)
         seen_ids.add(fingerprint)
 
-        print(f"  [{app}] {sender}: {message}")
+        print(f"  [{app}] {sender}: {message}", file=sys.stderr)
         new_count += 1
 
     # return notifications
@@ -172,6 +171,13 @@ def get_active_notifications():
 
 
 if __name__ == "__main__":
-    while True:
-        get_active_notifications()
-        time.sleep(30)  # 30 saat
+    result = get_active_notifications()
+    if result is None:
+        sys.exit(1)
+    notifications, new_count, skip_count = result
+    # Output JSON array to stdout — the only thing that goes to stdout
+    json.dump(notifications, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.flush()
+    print(
+        f"\nDone -- {new_count} new, {skip_count} skipped (duplicates)", file=sys.stderr
+    )

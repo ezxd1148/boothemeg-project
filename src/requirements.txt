@@ -2,8 +2,8 @@
 
 ## api.py
 
-fastapi
-fastapi[standard]
+flask
+flask-limiter
 
 ## get_notif.py
 

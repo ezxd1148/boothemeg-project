@@ -2,14 +2,17 @@
 processing.py
 
 this file is for openrouter api call and reformat
+
+Usage: reads JSON notifications from stdin, processes via OpenRouter, outputs JSON to stdout.
+Pipe: python get_notif.py | python processing.py | python calendar_api.py
 """
 
 import json
 import os
+import sys
 from datetime import date
 from pathlib import Path
 
-import get_notif
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -79,51 +82,79 @@ def extract_event(notification_text: str) -> dict:
     return json.loads(raw)
 
 
-def process_file(input_file):
+def process_notifications(notifications: list, source_name: str = "stdin") -> list:
+    """Process a list of notification dicts and return a list of extracted event dicts."""
     results = []
 
-    with open(input_file, "r", encoding="utf-8") as f:
-        data = json.load(f)  # load whole file at once
-
-    # handle both single object {} and array [{}]
-    if isinstance(data, dict):
-        data = [data]
-
-    for notif in data:
+    for notif in notifications:
         try:
-            text = notif.get("message", "")  # changed from "text" to "message"
+            text = notif.get("message", "")
             if not text:
-                print(f"[SKIP] Empty message in {input_file.name}")
+                print("[SKIP] Empty message", file=sys.stderr)
                 continue
 
             event = extract_event(text)
-            event["_source"] = input_file.name
+            event["_source"] = source_name
             results.append(event)
             print(
-                f"[OK] {event.get('title')} | schedulable={event.get('is_schedulable')}"
+                f"[OK] {event.get('title')} | schedulable={event.get('is_schedulable')}",
+                file=sys.stderr,
             )
 
         except json.JSONDecodeError as e:
-            print(f"[PARSE ERROR] {input_file.name}: {e}")
+            print(f"[PARSE ERROR]: {e}", file=sys.stderr)
         except Exception as e:
-            print(f"[API ERROR] {e}")
+            print(f"[API ERROR] {e}", file=sys.stderr)
 
     return results
 
 
+def process_file(input_file) -> list:
+    """Process a file (kept for backward compatibility)."""
+    with open(input_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if isinstance(data, dict):
+        data = [data]
+
+    source_name = getattr(input_file, "name", str(input_file))
+    return process_notifications(data, source_name)
+
+
 def save_results(results: list, input_file: Path):
     OUTPUT_FILE_DIR.mkdir(parents=True, exist_ok=True)
-    # One output file per input file
     output_path = OUTPUT_FILE_DIR / f"{input_file.stem}_processed.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
-    print(f"[SAVED] {output_path}")
+    print(f"[SAVED] {output_path}", file=sys.stderr)
 
 
-## Main
-# for sample_file in SAMPLE_FILE_DIR.iterdir():
-#     if sample_file.suffix not in (".jsonl", ".json"):
-#         continue
-#     print(f"\n[PROCESSING] {sample_file.name}")
-#     results = process_file(sample_file)
-#     save_results(results, sample_file)
+if __name__ == "__main__":
+    # Read JSON array from stdin
+    raw_input = sys.stdin.read()
+    if not raw_input.strip():
+        print("[ERROR] No input received on stdin", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        data = json.loads(raw_input)
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Invalid JSON on stdin: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if isinstance(data, dict):
+        data = [data]
+
+    print(f"[INFO] Processing {len(data)} notification(s)...", file=sys.stderr)
+
+    results = process_notifications(data)
+
+    # Output JSON array to stdout
+    json.dump(results, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.flush()
+
+    schedulable = sum(1 for r in results if r.get("is_schedulable"))
+    print(
+        f"\n[INFO] {len(results)} processed, {schedulable} schedulable",
+        file=sys.stderr,
+    )

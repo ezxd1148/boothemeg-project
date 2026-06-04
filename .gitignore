@@ -5,3 +5,7 @@ src/.credentials
 src/samples/
 unused-sample/
 src/backend/output/processed/
+
+# cache
+__pycache__/
+.venv/

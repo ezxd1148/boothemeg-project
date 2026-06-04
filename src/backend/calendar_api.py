@@ -1,9 +1,8 @@
 import json
 import os
+import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
-import processing
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -79,23 +78,35 @@ def add_events(events_json):
         # Skip if not schedulable
         if not item.get("is_schedulable", False):
             print(
-                f"⏭️  Skipped (not schedulable): {item.get('title')} — {item.get('description')}"
+                f"⏭️  Skipped (not schedulable): {item.get('title')} — {item.get('description')}",
+                file=sys.stderr,
             )
             skipped += 1
             continue
 
         event = build_event(item)
         result = service.events().insert(calendarId="primary", body=event).execute()
-        print(f"✅ Added to calendar: {item.get('title')} → {result.get('htmlLink')}")
+        print(
+            f"✅ Added to calendar: {item.get('title')} → {result.get('htmlLink')}",
+            file=sys.stderr,
+        )
         added += 1
 
-    print(f"\nDone! {added} added, {skipped} skipped.")
+    print(f"\nDone! {added} added, {skipped} skipped.", file=sys.stderr)
 
 
 # --- MAIN ---
 if __name__ == "__main__":
-    # Load your JSON (from a file or paste directly)
-    with open("events.json", "r") as f:
-        events = json.load(f)
+    # Read JSON array from stdin (piped from processing.py)
+    raw_input = sys.stdin.read()
+    if not raw_input.strip():
+        print("[ERROR] No input received on stdin", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        events = json.loads(raw_input)
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Invalid JSON on stdin: {e}", file=sys.stderr)
+        sys.exit(1)
 
     add_events(events)
