@@ -52,7 +52,7 @@ load_dotenv()
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("DEEPSEEK_API_KEY"),  # change
+    api_key=os.getenv("OPENROUTER_API_KEY"),  # change
 )
 
 
@@ -65,7 +65,7 @@ Notification: {notification_text}
 
 def extract_event(notification_text: str) -> dict:
     response = client.chat.completions.create(
-        model=os.getenv("DEEPSEEK_MODEL"),
+        model="poolside/laguna-m.1:free",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": build_prompt(notification_text)},
