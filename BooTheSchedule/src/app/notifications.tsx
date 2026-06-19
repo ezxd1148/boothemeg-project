@@ -1,42 +1,63 @@
-import { useState } from 'react';
-import { FlatList, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState } from "react";
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+  ActivityIndicator,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Button } from '@/components/button';
-import { NotificationItem } from '@/components/notification-item';
-import { EventItem } from '@/components/event-item';
-import { processNotifications, type Notification, type CalendarEvent } from '@/services/api';
-import { Spacing, Radius, Typography, MaxContentWidth } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Button } from "@/components/button";
+import { NotificationItem } from "@/components/notification-item";
+import { EventItem } from "@/components/event-item";
+import { Badge } from "@/components/badge";
+import {
+  processNotifications,
+  addToCalendar,
+  type Notification,
+  type CalendarEvent,
+  type CalendarAddResult,
+} from "@/services/api";
+import {
+  Spacing,
+  Radius,
+  Typography,
+  MaxContentWidth,
+} from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
 
 const MOCK_NOTIFICATIONS: Notification[] = [
   {
-    app: 'Telegram',
-    sender: 'Alice Chen',
-    message: 'Team standup tomorrow at 10am in Conference Room B. Bring your sprint update.',
-    time: '10 min ago',
-    category: 'msg',
+    app: "Telegram",
+    sender: "Alice Chen",
+    message:
+      "Team standup tomorrow at 10am in Conference Room B. Bring your sprint update.",
+    time: "10 min ago",
+    category: "msg",
   },
   {
-    app: 'WhatsApp',
-    sender: 'Bob Martinez',
-    message: 'Dinner this Friday at 7pm at Din Tai Fung? Let me know if you can make it!',
-    time: '25 min ago',
-    category: 'msg',
+    app: "WhatsApp",
+    sender: "Bob Martinez",
+    message:
+      "Dinner this Friday at 7pm at Din Tai Fung? Let me know if you can make it!",
+    time: "25 min ago",
+    category: "msg",
   },
   {
-    app: 'Gmail',
-    sender: 'HR Department',
-    message: 'Your performance review is scheduled for next Monday at 10am in Room 301.',
-    time: '1 hour ago',
-    category: 'email',
+    app: "Gmail",
+    sender: "HR Department",
+    message:
+      "Your performance review is scheduled for next Monday at 10am in Room 301.",
+    time: "1 hour ago",
+    category: "email",
   },
   {
-    app: 'Slack',
-    sender: 'Product Team',
-    message: 'hey what up',
-    time: '2 hours ago',
-    category: 'msg',
+    app: "Slack",
+    sender: "Product Team",
+    message: "hey what up",
+    time: "2 hours ago",
+    category: "msg",
   },
 ];
 
@@ -46,7 +67,12 @@ export default function NotificationsScreen() {
   const [events, setEvents] = useState<CalendarEvent[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<'notifications' | 'results'>('notifications');
+  const [calendarResult, setCalendarResult] =
+    useState<CalendarAddResult | null>(null);
+  const [addingToCalendar, setAddingToCalendar] = useState(false);
+  const [step, setStep] = useState<"notifications" | "results">(
+    "notifications",
+  );
 
   const handleProcess = async () => {
     setLoading(true);
@@ -54,7 +80,7 @@ export default function NotificationsScreen() {
     try {
       const result = await processNotifications(notifications);
       setEvents(result);
-      setStep('results');
+      setStep("results");
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -65,29 +91,84 @@ export default function NotificationsScreen() {
   const handleReset = () => {
     setEvents(null);
     setError(null);
-    setStep('notifications');
+    setCalendarResult(null);
+    setStep("notifications");
   };
 
-  if (step === 'results' && events) {
+  const handleAddToCalendar = async () => {
+    if (!events) return;
+    setAddingToCalendar(true);
+    setError(null);
+    try {
+      const result = await addToCalendar(events);
+      setCalendarResult(result);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setAddingToCalendar(false);
+    }
+  };
+
+  if (step === "results" && events) {
     const schedulable = events.filter((e) => e.is_schedulable);
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      <SafeAreaView
+        style={[styles.safeArea, { backgroundColor: theme.background }]}
+      >
         <FlatList
           data={events}
           keyExtractor={(_, i) => String(i)}
           renderItem={({ item }) => <EventItem event={item} />}
           ListHeaderComponent={() => (
             <View style={styles.content}>
-              <Text style={[styles.heading, { color: theme.text }]}>Processing Results</Text>
+              <Text style={[styles.heading, { color: theme.text }]}>
+                Processing Results
+              </Text>
               <Text style={[styles.summary, { color: theme.textSecondary }]}>
                 {events.length} analyzed — {schedulable.length} schedulable
               </Text>
-              {schedulable.length > 0 && (
-                <Button variant="primary" title="Add to Calendar →" onPress={() => {}} />
+              {schedulable.length > 0 && !calendarResult && (
+                <Button
+                  variant="primary"
+                  title={
+                    addingToCalendar
+                      ? "Adding to Calendar..."
+                      : "Add to Calendar →"
+                  }
+                  onPress={handleAddToCalendar}
+                  loading={addingToCalendar}
+                />
+              )}
+              {calendarResult && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: Spacing.xs,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Badge
+                    label={`${calendarResult.added} added`}
+                    variant="success"
+                  />
+                  <Badge
+                    label={`${calendarResult.skipped} skipped`}
+                    variant="warning"
+                  />
+                </View>
               )}
               <View style={{ height: Spacing.sm }} />
-              <Button variant="secondary" title="← Back to Notifications" onPress={handleReset} />
-              <Text style={[styles.sectionTitle, { color: theme.text, marginTop: Spacing.md }]}>
+              <Button
+                variant="secondary"
+                title="← Back to Notifications"
+                onPress={handleReset}
+              />
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: theme.text, marginTop: Spacing.md },
+                ]}
+              >
                 All Events
               </Text>
             </View>
@@ -101,33 +182,46 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: theme.background }]}
+    >
       <FlatList
         data={notifications}
         keyExtractor={(_, i) => String(i)}
         renderItem={({ item }) => <NotificationItem {...item} />}
         ListHeaderComponent={() => (
           <View style={styles.content}>
-            <Text style={[styles.heading, { color: theme.text }]}>Notifications</Text>
+            <Text style={[styles.heading, { color: theme.text }]}>
+              Notifications
+            </Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {notifications.length} notification{notifications.length !== 1 ? 's' : ''} ready to
-              process
+              {notifications.length} notification
+              {notifications.length !== 1 ? "s" : ""} ready to process
             </Text>
 
             {error && (
-              <View style={[styles.errorBox, { backgroundColor: theme.hairlineSoft }]}>
-                <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+              <View
+                style={[
+                  styles.errorBox,
+                  { backgroundColor: theme.hairlineSoft },
+                ]}
+              >
+                <Text style={[styles.errorText, { color: theme.error }]}>
+                  {error}
+                </Text>
               </View>
             )}
 
             <Button
               variant="primary"
-              title={loading ? 'Processing with AI...' : '🤖 Process with AI'}
+              title={loading ? "Processing with AI..." : "🤖 Process with AI"}
               onPress={handleProcess}
               disabled={notifications.length === 0}
               loading={loading}
             />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>All Notifications</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              All Notifications
+            </Text>
           </View>
         )}
         contentContainerStyle={{ paddingBottom: 100 }}
@@ -144,8 +238,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingTop: Spacing.lg,
     maxWidth: MaxContentWidth,
-    alignSelf: 'center',
-    width: '100%',
+    alignSelf: "center",
+    width: "100%",
     gap: Spacing.sm,
     marginBottom: Spacing.md,
   },
@@ -168,6 +262,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...Typography.bodySM,
-    fontWeight: '500',
+    fontWeight: "500",
   },
 });

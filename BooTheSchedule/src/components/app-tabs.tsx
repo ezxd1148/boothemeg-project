@@ -1,26 +1,31 @@
-import { SymbolView, type SFSymbol } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { useColorScheme, type ColorValue } from "react-native";
+import { type ColorValue } from "react-native";
 
 import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
 type TabConfig = {
   name: string;
   label: string;
-  icon: SFSymbol;
+  icon: keyof typeof Ionicons.glyphMap;
 };
 
 const TABS: TabConfig[] = [
-  { name: "index", label: "Home", icon: "house.fill" },
-  { name: "notifications", label: "Notifications", icon: "bell.badge.fill" },
-  { name: "pipeline", label: "Pipeline", icon: "arrow.triangle.pull" },
-  { name: "settings", label: "Settings", icon: "gearshape.fill" },
+  { name: "index", label: "Home", icon: "home" },
+  { name: "notifications", label: "Notifications", icon: "notifications" },
+  { name: "pipeline", label: "Pipeline", icon: "git-pull-request" },
+  { name: "settings", label: "Settings", icon: "settings" },
 ];
 
-function TabIcon({ symbol, color }: { symbol: SFSymbol; color: ColorValue }) {
-  return (
-    <SymbolView tintColor={color} name={symbol} size={22} weight="medium" />
-  );
+function TabIcon({
+  icon,
+  color,
+}: {
+  icon: TabConfig["icon"];
+  color: ColorValue;
+}) {
+  return <Ionicons name={icon} size={22} color={color} />;
 }
 
 export default function AppTabs() {
@@ -50,7 +55,7 @@ export default function AppTabs() {
           options={{
             title: tab.label,
             tabBarIcon: ({ color }) => (
-              <TabIcon symbol={tab.icon} color={color} />
+              <TabIcon icon={tab.icon} color={color} />
             ),
           }}
         />

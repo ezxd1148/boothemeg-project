@@ -1,13 +1,31 @@
 import datetime
 import hashlib
 import json
+import logging
 import re
 import sys
 from pathlib import Path
 
 from adbutils import adb  # type: ignore
 
-# sys.stdout.reconfigure(encoding='utf-8')
+# ── Logging ────────────────────────────────────────────────────────────────────
+logger = logging.getLogger("get_notif")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stderr,
+)
+
+# ── Optional Cython speedups ──────────────────────────────────────────────────
+try:
+    from ._speedups import make_fingerprint  # type: ignore[import-not-found]
+except ImportError:
+    # Pure Python fallback (no Cython compiled module available)
+    def make_fingerprint(app: str, sender: str, message: str) -> str:
+        """Hash of app+sender+message to catch same content with different ADB IDs."""
+        raw = f"{app}|{sender}|{message}".lower().strip()
+        return hashlib.md5(raw.encode()).hexdigest()
+
 
 SYSTEM_PACKAGES = {
     "android",
@@ -40,7 +58,6 @@ APP_LABELS = {
 }
 
 SEEN_IDS_FILE = Path(__file__).parent / "output" / "IDS" / "seen_ids.txt"
-# FILE_DIR_JSON_OUTPUT = Path(__file__).parent / "output" / "raw" / "file_raw.json"
 
 
 def load_seen_ids() -> set:
@@ -56,21 +73,15 @@ def save_seen_id(seen_id: str):
         f.write(seen_id + "\n")
 
 
-def make_fingerprint(app: str, sender: str, message: str) -> str:
-    """Hash of app+sender+message to catch same content with different ADB IDs."""
-    raw = f"{app}|{sender}|{message}".lower().strip()
-    return hashlib.md5(raw.encode()).hexdigest()
-
-
 def get_active_notifications():
     # ── Connect ───────────────────────────────────────────────────────────────
     devices = adb.device_list()
     if not devices:
-        print("No phone detected!", file=sys.stderr)
+        logger.error("No phone detected!")
         return None
 
     device = devices[0]
-    print(f"Connected: {device.serial}", file=sys.stderr)
+    logger.info("Connected: %s", device.serial)
 
     # ── Fetch dump ────────────────────────────────────────────────────────────
     try:
@@ -78,7 +89,7 @@ def get_active_notifications():
         if not raw or not raw.strip():
             raw = device.shell("dumpsys notification")
     except Exception as e:
-        print(f"Shell command failed: {e}", file=sys.stderr)
+        logger.error("Shell command failed: %s", e)
         return
 
     # ── Load already-processed IDs ────────────────────────────────────────────
@@ -156,18 +167,10 @@ def get_active_notifications():
         seen_ids.add(adb_key)
         seen_ids.add(fingerprint)
 
-        print(f"  [{app}] {sender}: {message}", file=sys.stderr)
+        logger.info("  [%s] %s: %s", app, sender, message)
         new_count += 1
 
-    # return notifications
-    return notifications, new_count, skip_count  # JSON, int, int
-
-    # ── Write all new notifications to JSON ───────────────────────────────────
-    # with open(FILE_DIR_JSON_OUTPUT, "w", encoding="utf-8") as f:
-    #     json.dump(notifications, f, indent=2, ensure_ascii=False)
-
-    # print(f"\nDone -- {new_count} new, {skip_count} skipped (duplicates)")
-    # print(f"Saved to: {FILE_DIR_JSON_OUTPUT}")
+    return notifications, new_count, skip_count
 
 
 if __name__ == "__main__":
@@ -178,6 +181,4 @@ if __name__ == "__main__":
     # Output JSON array to stdout — the only thing that goes to stdout
     json.dump(notifications, sys.stdout, indent=2, ensure_ascii=False)
     sys.stdout.flush()
-    print(
-        f"\nDone -- {new_count} new, {skip_count} skipped (duplicates)", file=sys.stderr
-    )
+    logger.info("Done -- %d new, %d skipped (duplicates)", new_count, skip_count)

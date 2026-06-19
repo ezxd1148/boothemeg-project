@@ -27,8 +27,8 @@ Install uv dalam device
 ```bash
 uv venv
 # Follow instruction
-uv add -r src/requirements.txt
-uv run python processing.py
+uv sync
+uv run python main.py
 ```
 
 ## License

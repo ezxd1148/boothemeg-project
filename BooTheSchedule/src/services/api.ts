@@ -1,4 +1,4 @@
-import { API_BASE_URL, API_TIMEOUT, ENDPOINTS } from '@/constants/api';
+import { API_BASE_URL, API_TIMEOUT, ENDPOINTS } from "@/constants/api";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 export interface Notification {
@@ -39,11 +39,12 @@ export interface PipelineResult {
   schedulable: number;
   added: number;
   skipped: number;
-  events: CalendarAddResult['events'];
+  events: CalendarAddResult["events"];
 }
 
 export interface HealthResponse {
   status: string;
+  cors: boolean;
   rate_limiting: boolean;
   endpoints: string[];
 }
@@ -67,7 +68,7 @@ async function request<T>(
       ...options,
       signal: controller.signal,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...options.headers,
       },
     });
@@ -75,14 +76,15 @@ async function request<T>(
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       throw new Error(
-        (body as ApiError).error || `HTTP ${response.status}: ${response.statusText}`,
+        (body as ApiError).error ||
+          `HTTP ${response.status}: ${response.statusText}`,
       );
     }
 
     return (await response.json()) as T;
   } catch (err: any) {
-    if (err.name === 'AbortError') {
-      throw new Error('Request timed out. Is the server running?');
+    if (err.name === "AbortError") {
+      throw new Error("Request timed out. Is the server running?");
     }
     throw err;
   } finally {
@@ -102,7 +104,7 @@ export async function processNotifications(
   notifications: Notification[],
 ): Promise<CalendarEvent[]> {
   return request<CalendarEvent[]>(ENDPOINTS.processNotifications, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(notifications),
   });
 }
@@ -112,7 +114,7 @@ export async function addToCalendar(
   events: CalendarEvent[],
 ): Promise<CalendarAddResult> {
   return request<CalendarAddResult>(ENDPOINTS.calendarAdd, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(events),
   });
 }
@@ -122,7 +124,7 @@ export async function runPipeline(
   notifications: Notification[],
 ): Promise<PipelineResult> {
   return request<PipelineResult>(ENDPOINTS.pipelineRun, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(notifications),
   });
 }

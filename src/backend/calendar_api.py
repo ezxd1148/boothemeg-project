@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import sys
 from datetime import datetime, timedelta
@@ -7,6 +8,14 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+
+# ── Logging ────────────────────────────────────────────────────────────────────
+logger = logging.getLogger("calendar_api")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stderr,
+)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 TIMEZONE = "Asia/Kuala_Lumpur"
@@ -28,7 +37,7 @@ def get_calendar_service():
 
 
 def build_event(item):
-    """Convert your friend's JSON format into a Google Calendar event."""
+    """Convert a calendar event dict into a Google Calendar API event resource."""
 
     # --- Build start dateTime ---
     # If date is null, use today as fallback
@@ -67,32 +76,61 @@ def build_event(item):
     return event
 
 
-def add_events(events_json):
-    """Takes the list of events and adds schedulable ones to Google Calendar."""
-    service = get_calendar_service()
+def add_events_to_calendar(events: list, service=None) -> tuple[int, int, list[dict]]:
+    """Add a list of calendar event dicts to Google Calendar.
+
+    This is the shared implementation used by both the CLI pipe and the Flask API.
+
+    Args:
+        events: List of event dicts with at least (title, date, is_schedulable).
+        service: A Google Calendar API service instance. If None, one is created.
+
+    Returns:
+        (added_count, skipped_count, event_links)
+        event_links is a list of dicts: {summary, start, link} or {summary, error}
+    """
+    if service is None:
+        service = get_calendar_service()
 
     added = 0
     skipped = 0
+    event_links = []
 
-    for item in events_json:
-        # Skip if not schedulable
+    for item in events:
         if not item.get("is_schedulable", False):
-            print(
-                f"⏭️  Skipped (not schedulable): {item.get('title')} — {item.get('description')}",
-                file=sys.stderr,
-            )
+            logger.info("Skipped (not schedulable): %s", item.get("title"))
             skipped += 1
             continue
 
-        event = build_event(item)
-        result = service.events().insert(calendarId="primary", body=event).execute()
-        print(
-            f"✅ Added to calendar: {item.get('title')} → {result.get('htmlLink')}",
-            file=sys.stderr,
-        )
-        added += 1
+        try:
+            event = build_event(item)
+            result = service.events().insert(calendarId="primary", body=event).execute()
+            event_links.append(
+                {
+                    "summary": event.get("summary"),
+                    "start": event["start"]["dateTime"],
+                    "link": result.get("htmlLink"),
+                }
+            )
+            added += 1
+            logger.info(
+                "Added to calendar: %s → %s",
+                event.get("summary"),
+                result.get("htmlLink"),
+            )
+        except Exception as e:
+            logger.error("Failed to add event '%s': %s", item.get("title", "?"), e)
+            event_links.append(
+                {"summary": item.get("title", "unknown"), "error": str(e)}
+            )
 
-    print(f"\nDone! {added} added, {skipped} skipped.", file=sys.stderr)
+    logger.info(
+        "%d added, %d skipped, %d errors",
+        added,
+        skipped,
+        len([e for e in event_links if "error" in e]),
+    )
+    return added, skipped, event_links
 
 
 # --- MAIN ---
@@ -100,13 +138,13 @@ if __name__ == "__main__":
     # Read JSON array from stdin (piped from processing.py)
     raw_input = sys.stdin.read()
     if not raw_input.strip():
-        print("[ERROR] No input received on stdin", file=sys.stderr)
+        logger.error("No input received on stdin")
         sys.exit(1)
 
     try:
         events = json.loads(raw_input)
     except json.JSONDecodeError as e:
-        print(f"[ERROR] Invalid JSON on stdin: {e}", file=sys.stderr)
+        logger.error("Invalid JSON on stdin: %s", e)
         sys.exit(1)
 
-    add_events(events)
+    add_events_to_calendar(events)

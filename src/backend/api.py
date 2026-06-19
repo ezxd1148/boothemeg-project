@@ -15,12 +15,31 @@ Run with:
   flask --app api run --port 5000
 """
 
+import os
 import sys
 
 from flask import Flask, jsonify, request
 
 # ── App factory ────────────────────────────────────────────────────────────────
 app = Flask(__name__)
+
+# ── CORS ───────────────────────────────────────────────────────────────────────
+try:
+    from flask_cors import CORS
+
+    # Allow the Expo app (both dev and web) to call the API.
+    # In production, restrict origins to your actual domain.
+    CORS(
+        app,
+        origins=os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:8081,http://localhost:19006,exp://",
+        ).split(","),
+    )
+    CORS_AVAILABLE = True
+except ImportError:
+    CORS_AVAILABLE = False
+    print("[WARN] flask-cors not installed — CORS headers disabled", file=sys.stderr)
 
 # ── Rate limiter ───────────────────────────────────────────────────────────────
 try:
@@ -60,6 +79,7 @@ def health():
     return jsonify(
         {
             "status": "ok",
+            "cors": CORS_AVAILABLE,
             "rate_limiting": RATE_LIMIT_AVAILABLE,
             "endpoints": [
                 "POST /notifications/process",
@@ -92,10 +112,10 @@ def process_notifications():
 
     if isinstance(body, dict):
         body = [body]
-    if not isinstance(body, list):
-        return jsonify(
-            {"error": "Request body must be a JSON array of notifications"}
-        ), 400
+
+    err, body = _validate_array(body, NOTIFICATION_SCHEMA, "notification")
+    if err:
+        return jsonify({"error": err}), 400
 
     try:
         results = proc_notifs(body, source_name="api")
@@ -119,7 +139,6 @@ def calendar_add():
     Response:
       {"added": N, "skipped": M, "events": [...]}
     """
-    from calendar_api import build_event
 
     body = request.get_json(silent=True)
     if body is None:
@@ -127,41 +146,19 @@ def calendar_add():
 
     if isinstance(body, dict):
         body = [body]
-    if not isinstance(body, list):
-        return jsonify({"error": "Request body must be a JSON array of events"}), 400
 
-    added = 0
-    skipped = 0
-    event_links = []
+    err, body = _validate_array(body, EVENT_SCHEMA, "event")
+    if err:
+        return jsonify({"error": err}), 400
 
     try:
-        from calendar_api import get_calendar_service
+        from calendar_api import add_events_to_calendar
 
-        service = get_calendar_service()
+        added, skipped, event_links = add_events_to_calendar(body)
     except Exception as e:
         return jsonify(
             {"error": f"Failed to connect to Google Calendar: {str(e)}"}
         ), 500
-
-    for item in body:
-        if not item.get("is_schedulable", False):
-            skipped += 1
-            continue
-        try:
-            event = build_event(item)
-            result = service.events().insert(calendarId="primary", body=event).execute()
-            event_links.append(
-                {
-                    "summary": event.get("summary"),
-                    "start": event["start"]["dateTime"],
-                    "link": result.get("htmlLink"),
-                }
-            )
-            added += 1
-        except Exception as e:
-            event_links.append(
-                {"summary": item.get("title", "unknown"), "error": str(e)}
-            )
 
     return jsonify({"added": added, "skipped": skipped, "events": event_links})
 
@@ -179,7 +176,7 @@ def pipeline_run():
     Response:
       {"processed": N, "schedulable": M, "added": A, "skipped": S, "events": [...]}
     """
-    from calendar_api import build_event, get_calendar_service
+    from calendar_api import add_events_to_calendar
     from processing import process_notifications as proc_notifs
 
     body = request.get_json(silent=True)
@@ -188,66 +185,131 @@ def pipeline_run():
 
     if isinstance(body, dict):
         body = [body]
-    if not isinstance(body, list):
-        return jsonify(
-            {"error": "Request body must be a JSON array of notifications"}
-        ), 400
+
+    err, body = _validate_array(body, NOTIFICATION_SCHEMA, "notification")
+    if err:
+        return jsonify({"error": err}), 400
 
     # Step 1: Process with AI
     try:
         events = proc_notifs(body, source_name="api_pipeline")
+    except RuntimeError as e:
+        return jsonify({"error": f"AI processing failed: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": f"Processing failed: {str(e)}"}), 500
 
     processed = len(events)
-    schedulable_events = [e for e in events if e.get("is_schedulable")]
+    schedulable_count = sum(1 for e in events if e.get("is_schedulable"))
 
-    # Step 2: Add to Calendar
-    added = 0
-    skipped = 0
-    event_links = []
-
+    # Step 2: Add to Calendar (shared implementation)
     try:
-        service = get_calendar_service()
+        added, skipped, event_links = add_events_to_calendar(events)
     except Exception as e:
         return jsonify(
             {
                 "error": f"Processing succeeded but calendar connection failed: {str(e)}",
                 "processed": processed,
-                "schedulable": len(schedulable_events),
+                "schedulable": schedulable_count,
                 "events": events,
             }
         ), 500
 
-    for item in events:
-        if not item.get("is_schedulable", False):
-            skipped += 1
-            continue
-        try:
-            event = build_event(item)
-            result = service.events().insert(calendarId="primary", body=event).execute()
-            event_links.append(
-                {
-                    "summary": event.get("summary"),
-                    "start": event["start"]["dateTime"],
-                    "link": result.get("htmlLink"),
-                }
-            )
-            added += 1
-        except Exception as e:
-            event_links.append(
-                {"summary": item.get("title", "unknown"), "error": str(e)}
-            )
-
     return jsonify(
         {
             "processed": processed,
-            "schedulable": len(schedulable_events),
+            "schedulable": schedulable_count,
             "added": added,
             "skipped": skipped,
             "events": event_links,
         }
     )
+
+
+# ── Input validation ───────────────────────────────────────────────────────────
+
+# Try Cython-accelerated versions first; fall back to pure Python.
+try:
+    from ._speedups import validate_event as _validate_event_cy
+    from ._speedups import (
+        validate_notification as _validate_notif_cy,  # type: ignore[import-not-found]
+    )
+
+    _HAS_SPEEDUPS = True
+except ImportError:
+    _HAS_SPEEDUPS = False
+
+NOTIFICATION_SCHEMA = {
+    "app": (str,),
+    "sender": (str, type(None)),
+    "message": (str, type(None)),
+    "time": (str, type(None)),
+    "category": (str, type(None)),
+}
+
+EVENT_SCHEMA = {
+    "title": (str, type(None)),
+    "date": (str, type(None)),
+    "time": (str, type(None)),
+    "duration_minutes": (int, type(None)),
+    "sender": (str, type(None)),
+    "description": (str, type(None)),
+    "location": (str, type(None)),
+    "attendees": (list,),
+    "recurrence": (str, type(None)),
+    "is_schedulable": (bool,),
+}
+
+
+def _validate_item(item: dict, schema: dict, label: str) -> str | None:
+    """Validate a single dict against a schema. Returns error message or None."""
+    if not isinstance(item, dict):
+        return f"Each {label} must be a JSON object, got {type(item).__name__}"
+
+    # Use Cython-accelerated validation for known schemas
+    if _HAS_SPEEDUPS:
+        if schema is NOTIFICATION_SCHEMA:
+            valid, err = _validate_notif_cy(item)  # type: ignore[possibly-undefined]
+            if not valid:
+                return f"{label}: {err}"
+            return None
+        elif schema is EVENT_SCHEMA:
+            valid, err = _validate_event_cy(item)  # type: ignore[possibly-undefined]
+            if not valid:
+                return f"{label}: {err}"
+            return None
+
+    # Pure Python fallback
+
+    for field, expected_types in schema.items():
+        if field not in item:
+            return f"{label} is missing required field: {field}"
+        if not isinstance(item[field], expected_types):
+            type_names = " | ".join(t.__name__ for t in expected_types)
+            return (
+                f"{label}.{field} must be {type_names}, "
+                f"got {type(item[field]).__name__}"
+            )
+
+    # Warn on unexpected fields (client may be sending garbage)
+    allowed = set(schema.keys())
+    extra = set(item.keys()) - allowed
+    if extra:
+        print(f"[WARN] Unexpected fields in {label}: {extra}", file=sys.stderr)
+
+    return None
+
+
+def _validate_array(body: list, schema: dict, label: str) -> tuple[str | None, list]:
+    """Validate an array of items. Returns (error, items) — error is None on success."""
+    if not isinstance(body, list):
+        return f"Request body must be a JSON array of {label}s", []
+
+    for i, item in enumerate(body):
+        err = _validate_item(item, schema, f"{label}[{i}]")
+        if err:
+            return err, []
+
+    return None, body
 
 
 # ── Error handlers ─────────────────────────────────────────────────────────────
@@ -268,4 +330,7 @@ if __name__ == "__main__":
         f"[INFO] Rate limiting: {'enabled' if RATE_LIMIT_AVAILABLE else 'DISABLED'}",
         file=sys.stderr,
     )
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # Debug mode is a security risk — enables arbitrary code execution via Werkzeug debugger.
+    # Only enable it when the env var is explicitly set (e.g. during local development).
+    debug = os.getenv("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
+    app.run(host="0.0.0.0", port=5000, debug=debug)

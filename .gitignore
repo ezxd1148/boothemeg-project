@@ -1,14 +1,49 @@
+# ── Secrets & credentials ────────────────────────────────────────────────────
 .env*
 src/.credentials
+token.json
+credentials.json
 
-# Test sample
-src/samples/
-unused-sample/
-src/backend/output/processed/
-
-# cache
+# ── Python bytecode & cache ──────────────────────────────────────────────────
 __pycache__/
+*.py[cod]
+*.egg-info/
 .venv/
 
-# agentic stuff
+# ── Build artifacts ──────────────────────────────────────────────────────────
+build/
+dist/
+*.so
+*.pyd
+
+# ── Cython intermediates ─────────────────────────────────────────────────────
+*.c
+src/backend/_speedups.html
+
+# ── Output & runtime data ────────────────────────────────────────────────────
+src/backend/output/
+src/samples/
+unused-sample/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+
+# ── Editor / IDE ─────────────────────────────────────────────────────────────
+.vscode/
+**/.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS junk ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Agent / AI tooling artifacts ─────────────────────────────────────────────
 .agents/
+.claude/
+
+# ── React Native / Expo (subproject handles its own .gitignore too) ──────────
+BooTheSchedule/node_modules/
+BooTheSchedule/.expo/
