@@ -36,7 +36,7 @@ Expo App (React Native) — A cross-platform mobile app (Android, iOS, web) with
 
 ## Quickstart
 
-Install uv dalam device
+Make sure you have uv installed
 
 ```bash
 uv venv
